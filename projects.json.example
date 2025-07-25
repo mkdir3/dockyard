@@ -1,0 +1,7 @@
+{
+  "web-frontend": "/home/user/projects/my-react-app",
+  "api-backend": "/home/user/projects/nodejs-api",
+  "database": "/home/user/projects/postgres-db",
+  "microservice-auth": "/home/user/projects/auth-service",
+  "monitoring": "/home/user/projects/grafana-prometheus"
+}

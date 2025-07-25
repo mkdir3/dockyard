@@ -1,0 +1,4 @@
+# Ignore idea directory
+.idea/
+projects.json
+.DS_Store

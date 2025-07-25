@@ -1,0 +1,77 @@
+name: "Bug Report"
+description: "File a detailed bug report (Go project)"
+title: "[Bug]: "
+labels:
+  - bug
+  - needs-triage
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to file a bug report.  
+        Please search for existing issues before submitting.
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Please specify output of `go version`
+      placeholder: "e.g. go version go1.21 darwin/amd64"
+    validations:
+      required: true
+  - type: input
+    id: os-arch
+    attributes:
+      label: OS & Architecture
+      description: Output of `go env GOOS GOARCH`
+      placeholder: "e.g. linux/amd64"
+    validations:
+      required: true
+  - type: input
+    id: commit-hash
+    attributes:
+      label: Commit hash / project version
+      description: Use `git rev-parse --short HEAD` or release tag
+      placeholder: "e.g. 1a2b3c4"
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: List precise steps to trigger the issue
+      placeholder: |
+        1. Clone repository
+        2. Run `go test ./...`
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected to happen
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe what actually happened
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or stack trace
+      description: Paste relevant logs or panic trace (rendered as code)
+      render: bash
+    validations:
+      required: false
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context (optional)
+      description: Related issues, workarounds, or suggestions
+    validations:
+      required: false
