@@ -1,0 +1,176 @@
+common:
+  docker_not_found: "❌ Docker CLI not found on your system"
+  docker_status_check: "🔍 Checking Docker status..."
+  docker_running: "✅ Docker daemon is running and accessible"
+  runtime_start_attempt: "🚀 Attempting to start container runtime..."
+  runtime_waiting: "⏳ Waiting for container runtime to start..."
+  runtime_start_failed: "❌ Container runtime failed to start within %v"
+  orbstack_start_sent: "✅ OrbStack start command sent!"
+  orbstack_note: "   Note: OrbStack may take a few seconds to initialize..."
+  colima_start_sent: "✅ Colima start command sent!"
+  colima_note: "   Note: Colima may take some time to download and start the VM..."
+  docker_desktop_sent: "✅ Docker Desktop start command sent!"
+  container_runtime_sent: "✅ Container runtime start command sent!"
+
+platforms:
+  darwin:
+    install_options:
+      - "🍎 macOS Container Runtime Options:"
+      - "   1. Docker Desktop - https://www.docker.com/products/docker-desktop"
+      - "   2. OrbStack (recommended) - https://orbstack.dev"
+      - "   3. Colima - brew install colima docker"
+      - "   4. Podman - brew install podman"
+    
+    troubleshooting:
+      - "🍎 macOS Container Runtime troubleshooting:"
+      - "   Your container runtime might not be running"
+    
+    runtimes:
+      orbstack:
+        manual_start:
+          - "📖 OrbStack Setup Instructions:"
+          - ""
+          - "   Manual Start:"
+          - "     • Open OrbStack from Applications folder"
+          - "     • Or run: open -a OrbStack"
+        auto_start:
+          - "   Auto-Start Setup:"
+          - "     • Open OrbStack → Settings → General"
+          - "     • Enable 'Start on login'"
+          - "     • This prevents this issue in the future"
+      
+      colima:
+        manual_start:
+          - "📖 Colima Setup Instructions:"
+          - ""
+          - "   Manual Start:"
+          - "     • Run: colima start"
+        auto_start:
+          - "   Auto-Start Setup:"
+          - "     • Run: brew services start colima"
+          - "     • This will start Colima automatically on boot"
+        commands:
+          - "   Troubleshooting:"
+          - "     • Check: colima status"
+          - "     • Reset: colima delete && colima start"
+    
+    startup:
+      manual:
+        - "🚀 Manual Startup Commands:"
+        - ""
+        - "   OrbStack:      Open OrbStack app (usually auto-starts)"
+        - "   Docker Desktop: Open Docker Desktop app"
+        - "   Colima:        colima start"
+        - "   Podman:        podman machine start"
+        - ""
+        - "   Test: docker --version"
+      
+      auto:
+        - "⚙️  Auto-Start Setup (start with computer):"
+        - ""
+        - "   OrbStack:"
+        - "     • Open OrbStack → Settings → General"
+        - "     • Enable 'Start on login'"
+        - ""
+        - "   Docker Desktop:"
+        - "     • Open Docker Desktop → Settings → General"
+        - "     • Enable 'Start Docker Desktop when you log in'"
+        - ""
+        - "   Colima:"
+        - "     • Create: ~/Library/LaunchAgents/colima.plist"
+        - "     • Or use: brew services start colima"
+        - ""
+        - "   Podman:"
+        - "     • podman system service --time=0 --log-level=info"
+        - "     • Add to login items in System Preferences"
+
+  windows:
+    install_options:
+      - "🪟 Windows Container Runtime Options:"
+      - "   1. Docker Desktop - https://www.docker.com/products/docker-desktop"
+      - "   2. Podman Desktop - https://podman-desktop.io"
+    
+    troubleshooting:
+      - "🪟 Windows Docker troubleshooting:"
+      - "   1. Start Docker Desktop from the Start menu"
+      - "   2. Wait for Docker Desktop to fully start (check system tray)"
+      - "   3. Ensure WSL 2 is properly configured (if using WSL 2 backend)"
+    
+    startup:
+      manual:
+        - "🚀 Manual Startup Commands:"
+        - ""
+        - "   Docker Desktop: Open Docker Desktop from Start menu"
+        - "   Podman:        podman machine start"
+        - ""
+        - "   Test: docker --version"
+      
+      auto:
+        - "⚙️  Auto-Start Setup (start with computer):"
+        - ""
+        - "   Docker Desktop:"
+        - "     • Open Docker Desktop → Settings → General"
+        - "     • Enable 'Start Docker Desktop when you log in'"
+        - ""
+        - "   Podman:"
+        - "     • Add podman machine start to Windows startup"
+        - "     • Use Task Scheduler or startup folder"
+
+  linux:
+    install_options:
+      - "🐧 Linux Container Runtime Options:"
+      - "   1. Docker Engine - sudo apt install docker.io (Ubuntu/Debian)"
+      - "   2. Docker Engine - sudo dnf install docker (Fedora/RHEL)"
+      - "   3. Podman - sudo apt install podman (Ubuntu/Debian)"
+      - "   4. Podman - sudo dnf install podman (Fedora/RHEL)"
+    
+    troubleshooting:
+      - "🐧 Linux Docker troubleshooting:"
+      - "   1. Start Docker daemon: sudo systemctl start docker"
+      - "   2. Enable Docker service: sudo systemctl enable docker"
+      - "   3. Add user to docker group: sudo usermod -aG docker $USER"
+      - "   4. Log out and back in for group changes to take effect"
+    
+    startup:
+      manual:
+        - "🚀 Manual Startup Commands:"
+        - ""
+        - "   Docker Engine: sudo systemctl start docker"
+        - "   Podman:        sudo systemctl start podman"
+        - ""
+        - "   Test: docker --version"
+      
+      auto:
+        - "⚙️  Auto-Start Setup (start with computer):"
+        - ""
+        - "   Docker Engine:"
+        - "     • sudo systemctl enable docker"
+        - "     • sudo usermod -aG docker $USER (then logout/login)"
+        - ""
+        - "   Podman:"
+        - "     • sudo systemctl enable podman"
+        - "     • sudo usermod -aG podman $USER (then logout/login)"
+
+ui_options:
+  startup_options_message: "Container runtime startup options:"
+  startup_options:
+    - "Show manual startup commands"
+    - "Show auto-start setup (start with computer)"
+    - "Exit and fix manually"
+  
+  runtime_options_message: "What would you like to do?"
+  runtime_options:
+    - "Try to start container runtime automatically"
+    - "Wait and retry (container runtime might be starting)"
+    - "Get manual startup instructions"
+    - "Exit and fix manually"
+
+error_messages:
+  install_runtime: "please install a Docker-compatible container runtime and try again"
+  start_runtime_manually: "please start your container runtime manually and try again"
+  start_orbstack: "please start OrbStack and try dockyard again"
+  start_colima: "please start Colima and try dockyard again"
+  manual_startup: "run the appropriate command and try dockyard again"
+  auto_start_setup: "configure auto-start and try dockyard again"
+  docker_desktop_manual: "please start Docker Desktop manually and try again"
+  docker_daemon_manual: "please start Docker daemon manually and try again"

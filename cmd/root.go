@@ -24,7 +24,6 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Docker status before proceeding
 		if err := docker.CheckDockerStatus(); err != nil {
-			fmt.Printf("❌ Docker check failed: %v\n", err)
 			return
 		}
 
