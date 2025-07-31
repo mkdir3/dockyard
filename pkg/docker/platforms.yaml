@@ -4,7 +4,7 @@ common:
   docker_running: "✅ Docker daemon is running and accessible"
   runtime_start_attempt: "🚀 Attempting to start container runtime..."
   runtime_waiting: "⏳ Waiting for container runtime to start..."
-  runtime_start_failed: "❌ Container runtime failed to start within %v"
+  runtime_start_failed: "❌ Container runtime failed to start within %d seconds"
   orbstack_start_sent: "✅ OrbStack start command sent!"
   orbstack_note: "   Note: OrbStack may take a few seconds to initialize..."
   colima_start_sent: "✅ Colima start command sent!"
