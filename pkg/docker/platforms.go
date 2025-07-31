@@ -78,7 +78,7 @@ func init() {
 
 func printLines(lines []string) {
 	styled := ui.RenderList(lines)
-	fmt.Print(styled)
+	fmt.Println(styled)
 }
 
 func getPlatformConfiguration(platform string) PlatformConfiguration {

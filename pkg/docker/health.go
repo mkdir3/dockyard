@@ -106,30 +106,122 @@ func StartDockerDesktop() error {
 	}
 }
 
+// CheckDockerStatus performs a brief Docker status check during startup
+// and optionally shows detailed information if requested by the user
 func CheckDockerStatus() error {
-	fmt.Println(ui.RenderInfo(config.Common.DockerStatusCheck))
+	return checkDockerStatusBrief()
+}
 
+// checkDockerStatusBrief performs a minimal Docker status check with clean UI
+func checkDockerStatusBrief() error {
+	// Show a clean, minimal status check message with inline status
+	fmt.Print(ui.RenderInlineStatus("🐳 Docker"))
+
+	// Quick availability check
 	if !IsDockerAvailable() {
+		fmt.Print(" ❌")
+		fmt.Println()
 		return handleDockerNotInstalled()
 	}
+
+	// Quick daemon connectivity check
+	dhc, err := NewDockerHealthChecker()
+	if err != nil {
+		fmt.Print(" ❌")
+		fmt.Println()
+		return fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	defer func(dhc *HealthChecker) {
+		if closeErr := dhc.Close(); closeErr != nil {
+			// Only log close errors in verbose mode
+		}
+	}(dhc)
+
+	err = dhc.CheckDockerDaemon()
+	if err != nil {
+		fmt.Print(" ❌")
+		fmt.Println()
+		return handleDockerDaemonError(err)
+	}
+
+	// Success - show clean checkmark
+	fmt.Print(" ✅")
+	fmt.Println()
+
+	// Ask if user wants detailed Docker information
+	return offerDetailedDockerInfo()
+}
+
+// offerDetailedDockerInfo asks the user if they want to see detailed Docker status
+func offerDetailedDockerInfo() error {
+	var showDetails bool
+	prompt := &survey.Confirm{
+		Message: "Show detailed Docker status?",
+		Default: false,
+	}
+
+	err := survey.AskOne(prompt, &showDetails)
+	if err != nil {
+		// If survey fails, continue without detailed info
+		return nil
+	}
+
+	if showDetails {
+		return showDetailedDockerStatus()
+	}
+
+	return nil
+}
+
+// showDetailedDockerStatus displays comprehensive Docker status information
+func showDetailedDockerStatus() error {
+	fmt.Println()
+	fmt.Println(ui.RenderHeader("📊 Detailed Docker Status"))
+	fmt.Println()
 
 	dhc, err := NewDockerHealthChecker()
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %v", err)
 	}
 	defer func(dhc *HealthChecker) {
-		err := dhc.Close()
-		if err != nil {
-			fmt.Printf("❌ Failed to close Docker client: %v\n", err)
+		if closeErr := dhc.Close(); closeErr != nil {
+			fmt.Printf("❌ Failed to close Docker client: %v\n", closeErr)
 		}
 	}(dhc)
 
-	err = dhc.CheckDockerDaemon()
-	if err != nil {
-		return handleDockerDaemonError(err)
+	// Show Docker version and system info
+	ctx, cancel := context.WithTimeout(dhc.ctx, PingTimeout)
+	defer cancel()
+
+	// Get Docker version info
+	version, err := dhc.client.ServerVersion(ctx)
+	if err == nil {
+		fmt.Printf("🐳 %s\n", ui.RenderSuccess(fmt.Sprintf("Docker Engine %s", version.Version)))
+		fmt.Printf("   API Version: %s\n", version.APIVersion)
+		fmt.Printf("   Platform: %s/%s\n", version.Os, version.Arch)
+		fmt.Println()
+	} else {
+		fmt.Println(ui.RenderWarning("Could not retrieve Docker version info"))
 	}
 
-	fmt.Println(ui.RenderSuccess(config.Common.DockerRunning))
+	// Get system info
+	info, err := dhc.client.Info(ctx)
+	if err == nil {
+		fmt.Println(ui.RenderHeader("🔧 System Information"))
+		fmt.Printf("   Containers: %d (running: %d, paused: %d, stopped: %d)\n",
+			info.Containers, info.ContainersRunning, info.ContainersPaused, info.ContainersStopped)
+		fmt.Printf("   Images: %d\n", info.Images)
+		fmt.Printf("   Server Version: %s\n", info.ServerVersion)
+		fmt.Printf("   Storage Driver: %s\n", info.Driver)
+		fmt.Printf("   Total Memory: %.2f GB\n", float64(info.MemTotal)/(1024*1024*1024))
+		fmt.Printf("   CPUs: %d\n", info.NCPU)
+		fmt.Println()
+	} else {
+		fmt.Println(ui.RenderWarning("Could not retrieve system information"))
+		fmt.Println()
+	}
+
+	fmt.Println(ui.RenderSuccess("Docker is running properly! 🚀"))
 	return nil
 }
 
@@ -140,7 +232,7 @@ func handleDockerNotInstalled() error {
 	printLines(platformConfig.InstallOptions)
 
 	fmt.Println()
-	return fmt.Errorf(config.ErrorMessages.InstallRuntime)
+	return fmt.Errorf("%s", config.ErrorMessages.InstallRuntime)
 }
 
 func handleDockerDaemonError(err error) error {
@@ -180,7 +272,7 @@ func handleMacOSDockerError() error {
 	case config.UIOptions.RuntimeOptions[2]: // "Get manual startup instructions"
 		return showStartupOptions()
 	default:
-		return fmt.Errorf(config.ErrorMessages.StartRuntimeManually)
+		return fmt.Errorf("%s", config.ErrorMessages.StartRuntimeManually)
 	}
 }
 
@@ -188,14 +280,14 @@ func handleWindowsDockerError() error {
 	platformConfig := getPlatformConfiguration("windows")
 	printLines(platformConfig.Troubleshooting)
 	fmt.Println()
-	return fmt.Errorf(config.ErrorMessages.DockerDesktopManual)
+	return fmt.Errorf("%s", config.ErrorMessages.DockerDesktopManual)
 }
 
 func handleLinuxDockerError() error {
 	platformConfig := getPlatformConfiguration("linux")
 	printLines(platformConfig.Troubleshooting)
 	fmt.Println()
-	return fmt.Errorf(config.ErrorMessages.DockerDaemonManual)
+	return fmt.Errorf("%s", config.ErrorMessages.DockerDaemonManual)
 }
 
 func attemptOrbStackStart() error {
@@ -218,7 +310,7 @@ func showOrbStackInstructions() error {
 		printLines(orbInstructions.AutoStart)
 		fmt.Println()
 	}
-	return fmt.Errorf(config.ErrorMessages.StartOrbStack)
+	return fmt.Errorf("%s", config.ErrorMessages.StartOrbStack)
 }
 
 func attemptColimaStart() error {
@@ -243,7 +335,7 @@ func showColimaInstructions() error {
 		printLines(colimaInstructions.Commands)
 		fmt.Println()
 	}
-	return fmt.Errorf(config.ErrorMessages.StartColima)
+	return fmt.Errorf("%s", config.ErrorMessages.StartColima)
 }
 
 func attemptContainerRuntimeStart() error {
@@ -304,7 +396,7 @@ func waitAndRetryDocker() error {
 	}
 
 	fmt.Println()
-	fmt.Printf(ui.RenderError(fmt.Sprintf(config.Common.RuntimeStartFailed, int(RuntimeStartTimeout.Seconds()))))
+	fmt.Println(ui.RenderError(fmt.Sprintf(config.Common.RuntimeStartFailed, int(RuntimeStartTimeout.Seconds()))))
 	return showStartupOptions()
 }
 
@@ -328,7 +420,7 @@ func showStartupOptions() error {
 	case config.UIOptions.StartupOptions[1]: // "Show auto-start setup (start with computer)"
 		return showAutoStartSetup()
 	default:
-		return fmt.Errorf(config.ErrorMessages.StartRuntimeManually)
+		return fmt.Errorf("%s", config.ErrorMessages.StartRuntimeManually)
 	}
 }
 
@@ -336,12 +428,12 @@ func showManualStartup() error {
 	msgs := getStartupInstructions(runtime.GOOS, "manual")
 	printLines(msgs)
 	fmt.Println()
-	return fmt.Errorf(config.ErrorMessages.ManualStartup)
+	return fmt.Errorf("%s", config.ErrorMessages.ManualStartup)
 }
 
 func showAutoStartSetup() error {
 	msgs := getStartupInstructions(runtime.GOOS, "auto")
 	printLines(msgs)
 	fmt.Println()
-	return fmt.Errorf(config.ErrorMessages.AutoStartSetup)
+	return fmt.Errorf("%s", config.ErrorMessages.AutoStartSetup)
 }

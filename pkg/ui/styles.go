@@ -235,3 +235,24 @@ func RenderRuntimeIcon(runtime string) string {
 		return "📦"
 	}
 }
+
+// Status indicator styles
+func RenderStatusCheck(message string) string {
+	return infoStyle.Render(fmt.Sprintf("🔍 %s", message))
+}
+
+func RenderQuickStatus(message string, success bool) string {
+	if success {
+		return fmt.Sprintf("%s %s",
+			successStyle.Render("✅"),
+			message)
+	}
+	return fmt.Sprintf("%s %s",
+		errorStyle.Render("❌"),
+		message)
+}
+
+// Inline status rendering for brief checks
+func RenderInlineStatus(message string) string {
+	return infoStyle.Render(message)
+}

@@ -11,121 +11,178 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// projectRunner handles the execution of project operations with proper resource management
+type projectRunner struct {
+	successCount   int
+	failedProjects []string
+}
+
+// result represents the result of a project operation
+type result struct {
+	projectName string
+	success     bool
+	err         error
+}
+
+// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "dockyard",
-	Short: "CLI app to manage Dockerized projects",
-	Long:  `A CLI app to manage Dockerized projects using Docker Compose. It can start, stop and list running Docker containers.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if err := docker.CheckAndLoadProjectsFile("projects.json"); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-	},
-	PreRun: func(cmd *cobra.Command, args []string) {
-		// Show welcome message only when running root command
-		utils.ProjectInfo()
-	},
-	Run: func(cmd *cobra.Command, args []string) {
-		// Check Docker status before proceeding
-		if err := docker.CheckDockerStatus(); err != nil {
-			return
-		}
+	Use:              "dockyard",
+	Short:            "CLI app to manage Dockerized projects",
+	Long:             `A CLI app to manage Dockerized projects using Docker Compose. It can start, stop and list running Docker containers.`,
+	PersistentPreRun: handlePersistentPreRun,
+	PreRun:           handlePreRun,
+	Run:              handleRootCommand,
+}
 
-		// Your existing project selection workflow
-		selectedProjects, err := docker.SelectProjects()
-		if err != nil {
-			fmt.Printf("Failed to select projects: %v\n", err)
-			return
-		}
+// handlePersistentPreRun loads the projects configuration file
+func handlePersistentPreRun(cmd *cobra.Command, args []string) {
+	if err := docker.CheckAndLoadProjectsFile("projects.json"); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
 
-		if len(selectedProjects) == 0 {
-			fmt.Println("No projects selected.")
-			return
-		}
+// handlePreRun displays project information
+func handlePreRun(cmd *cobra.Command, args []string) {
+	utils.ProjectInfo()
+}
 
-		fmt.Printf("🚀 Starting %d selected project(s)...\n\n", len(selectedProjects))
+// handleRootCommand is the main entry point for the root command
+func handleRootCommand(cmd *cobra.Command, args []string) {
+	if err := docker.CheckDockerStatus(); err != nil {
+		return
+	}
 
-		successCount := 0
-		var failedProjects []string
+	selectedProjects, err := docker.SelectProjects()
+	if err != nil {
+		fmt.Printf("Failed to select projects: %v\n", err)
+		return
+	}
 
-		for _, projectName := range selectedProjects {
-			projectPath, ok := docker.Projects[projectName]
-			if !ok {
-				fmt.Printf("❌ Unknown project: %s\n", projectName)
-				failedProjects = append(failedProjects, projectName)
-				continue
-			}
+	if len(selectedProjects) == 0 {
+		fmt.Println("No projects selected.")
+		return
+	}
 
-			projectDir, err := utils.ResolveHomeDir(projectPath)
-			if err != nil {
-				fmt.Printf("❌ Failed to resolve home directory for %s: %v\n", projectName, err)
-				failedProjects = append(failedProjects, projectName)
-				continue
-			}
+	runner := &projectRunner{}
+	runner.startProjects(selectedProjects)
+	runner.handleResults(selectedProjects)
+}
 
-			// Create compose manager for each project
-			cm, err := docker.NewComposeManager()
-			if err != nil {
-				fmt.Printf("❌ Failed to create compose manager for %s: %v\n", projectName, err)
-				failedProjects = append(failedProjects, projectName)
-				continue
-			}
+// startProjects attempts to start all selected projects
+func (r *projectRunner) startProjects(selectedProjects []string) {
+	fmt.Printf("🚀 Starting %d selected project(s)...\n\n", len(selectedProjects))
 
-			fmt.Printf("📦 Starting project: %s\n", projectName)
-			err = cm.StartProject(projectDir, true, true) // detached=true, removeOrphans=true
-			err = cm.Close()
-
-			if err != nil {
-				fmt.Printf("❌ Failed to start project %s: %v\n", projectName, err)
-				failedProjects = append(failedProjects, projectName)
-
-				// If Docker daemon becomes unavailable during operation, stop trying
-				if isDaemonError(err) {
-					fmt.Println("\n🛑 Docker daemon issue detected. Stopping further operations.")
-					break
-				}
-				continue
-			}
-
+	for _, projectName := range selectedProjects {
+		result := r.startSingleProject(projectName)
+		if result.success {
 			fmt.Printf("✅ Successfully started project: %s\n\n", projectName)
-			successCount++
-		}
+			r.successCount++
+		} else {
+			fmt.Printf("❌ Failed to start project %s: %v\n", projectName, result.err)
+			r.failedProjects = append(r.failedProjects, projectName)
 
-		// Summary with retry option
-		fmt.Printf("📊 Summary: %d/%d projects started successfully\n", successCount, len(selectedProjects))
-
-		if len(failedProjects) > 0 {
-			fmt.Printf("❌ Failed projects: %v\n", failedProjects)
-
-			// Offer to retry failed projects
-			var retryFailed string
-			retryPrompt := &survey.Select{
-				Message: "Would you like to retry the failed projects?",
-				Options: []string{
-					"Yes, retry failed projects",
-					"No, I'll fix issues manually",
-				},
-			}
-
-			err = survey.AskOne(retryPrompt, &retryFailed)
-			if err == nil && retryFailed == "Yes, retry failed projects" {
-				fmt.Println("\n🔄 Retrying failed projects...")
-				retryFailedProjects(failedProjects)
+			// Stop if Docker daemon becomes unavailable
+			if isDaemonError(result.err) {
+				fmt.Println("\n🛑 Docker daemon issue detected. Stopping further operations.")
+				break
 			}
 		}
+	}
+}
 
-		// Show status of all projects if any succeeded
-		if successCount > 0 {
-			fmt.Println("\n📈 Current project status:")
-			showStatusForProjects(selectedProjects)
-		} else if len(failedProjects) > 0 {
-			fmt.Println("\n💡 Tip: Run 'dockyard status' to check the current state of your projects")
+// startSingleProject starts a single project and returns the result
+func (r *projectRunner) startSingleProject(projectName string) result {
+	projectPath, ok := docker.Projects[projectName]
+	if !ok {
+		return result{
+			projectName: projectName,
+			success:     false,
+			err:         fmt.Errorf("unknown project: %s", projectName),
 		}
-	},
+	}
+
+	projectDir, err := utils.ResolveHomeDir(projectPath)
+	if err != nil {
+		return result{
+			projectName: projectName,
+			success:     false,
+			err:         fmt.Errorf("failed to resolve home directory: %w", err),
+		}
+	}
+
+	fmt.Printf("📦 Starting project: %s\n", projectName)
+	err = executeWithComposeManager(projectDir, func(cm *docker.ComposeManager) error {
+		return cm.StartProject(projectDir, true, true) // detached=true, removeOrphans=true
+	})
+
+	return result{
+		projectName: projectName,
+		success:     err == nil,
+		err:         err,
+	}
+}
+
+// handleResults processes the results and offers retry options
+func (r *projectRunner) handleResults(selectedProjects []string) {
+	fmt.Printf("📊 Summary: %d/%d projects started successfully\n", r.successCount, len(selectedProjects))
+
+	if len(r.failedProjects) > 0 {
+		fmt.Printf("❌ Failed projects: %v\n", r.failedProjects)
+		r.offerRetry()
+	}
+
+	r.showFinalStatus(selectedProjects)
+}
+
+// offerRetry asks the user if they want to retry failed projects
+func (r *projectRunner) offerRetry() {
+	var retryFailed string
+	retryPrompt := &survey.Select{
+		Message: "Would you like to retry the failed projects?",
+		Options: []string{
+			"Yes, retry failed projects",
+			"No, I'll fix issues manually",
+		},
+	}
+
+	if err := survey.AskOne(retryPrompt, &retryFailed); err == nil && retryFailed == "Yes, retry failed projects" {
+		fmt.Println("\n🔄 Retrying failed projects...")
+		retryFailedProjects(r.failedProjects)
+	}
+}
+
+// showFinalStatus displays the final status or helpful tips
+func (r *projectRunner) showFinalStatus(selectedProjects []string) {
+	if r.successCount > 0 {
+		fmt.Println("\n📈 Current project status:")
+		showStatusForProjects(selectedProjects)
+	} else if len(r.failedProjects) > 0 {
+		fmt.Println("\n💡 Tip: Run 'dockyard status' to check the current state of your projects")
+	}
+}
+
+// executeWithComposeManager creates a compose manager, executes the function, and ensures proper cleanup
+func executeWithComposeManager(projectDir string, fn func(*docker.ComposeManager) error) error {
+	cm, err := docker.NewComposeManager()
+	if err != nil {
+		return fmt.Errorf("failed to create compose manager: %w", err)
+	}
+	defer func() {
+		if closeErr := cm.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close compose manager: %v\n", closeErr)
+		}
+	}()
+
+	return fn(cm)
 }
 
 // isDaemonError checks if the error is related to Docker daemon connectivity
 func isDaemonError(err error) bool {
+	if err == nil {
+		return false
+	}
+
 	errorStr := err.Error()
 	daemonErrors := []string{
 		"Docker daemon is not running",
@@ -142,104 +199,107 @@ func isDaemonError(err error) bool {
 	return false
 }
 
+// showStatusForProjects displays the status of all specified projects
 func showStatusForProjects(projectNames []string) {
 	for _, projectName := range projectNames {
-		projectPath, ok := docker.Projects[projectName]
-		if !ok {
-			continue
-		}
+		showSingleProjectStatus(projectName)
+	}
+}
 
-		projectDir, err := utils.ResolveHomeDir(projectPath)
-		if err != nil {
-			fmt.Printf("❌ %s: Failed to resolve path\n", projectName)
-			continue
-		}
+// showSingleProjectStatus displays the status of a single project
+func showSingleProjectStatus(projectName string) {
+	projectPath, ok := docker.Projects[projectName]
+	if !ok {
+		return
+	}
 
-		cm, err := docker.NewComposeManager()
-		if err != nil {
-			fmt.Printf("❌ %s: Failed to create compose manager\n", projectName)
-			continue
-		}
+	projectDir, err := utils.ResolveHomeDir(projectPath)
+	if err != nil {
+		fmt.Printf("❌ %s: Failed to resolve path\n", projectName)
+		return
+	}
 
-		statuses, err := cm.GetProjectStatus(projectDir)
-		err = cm.Close()
-		if err != nil {
-			fmt.Printf("❌ %s: Failed to close compose manager\n", projectName)
-			continue
-		}
+	var statuses []docker.ContainerStatus
+	err = executeWithComposeManager(projectDir, func(cm *docker.ComposeManager) error {
+		var statusErr error
+		statuses, statusErr = cm.GetProjectStatus(projectDir)
+		return statusErr
+	})
 
-		if len(statuses) == 0 {
-			fmt.Printf("📭 %s: No containers\n", projectName)
-		} else {
-			runningCount := 0
-			for _, status := range statuses {
-				if status.State == "running" {
-					runningCount++
-				}
-			}
+	if err != nil {
+		fmt.Printf("❌ %s: Failed to get status: %v\n", projectName, err)
+		return
+	}
 
-			if runningCount > 0 {
-				fmt.Printf("🟢 %s: %d/%d containers running\n", projectName, runningCount, len(statuses))
-			} else {
-				fmt.Printf("🔴 %s: %d containers stopped\n", projectName, len(statuses))
-			}
+	displayProjectStatus(projectName, statuses)
+}
+
+// displayProjectStatus formats and displays the container status information
+func displayProjectStatus(projectName string, statuses []docker.ContainerStatus) {
+	if len(statuses) == 0 {
+		fmt.Printf("📭 %s: No containers\n", projectName)
+		return
+	}
+
+	runningCount := countRunningContainers(statuses)
+	if runningCount > 0 {
+		fmt.Printf("🟢 %s: %d/%d containers running\n", projectName, runningCount, len(statuses))
+	} else {
+		fmt.Printf("🔴 %s: %d containers stopped\n", projectName, len(statuses))
+	}
+}
+
+// countRunningContainers returns the number of running containers
+func countRunningContainers(statuses []docker.ContainerStatus) int {
+	count := 0
+	for _, status := range statuses {
+		if status.State == "running" {
+			count++
 		}
 	}
+	return count
 }
 
 // retryFailedProjects attempts to retry projects that failed to start
 func retryFailedProjects(failedProjects []string) {
-	successCount := 0
-	var stillFailed []string
+	retryRunner := &projectRunner{}
 
 	for _, projectName := range failedProjects {
-		projectPath, ok := docker.Projects[projectName]
-		if !ok {
-			fmt.Printf("❌ Unknown project: %s\n", projectName)
-			stillFailed = append(stillFailed, projectName)
-			continue
-		}
+		result := retryRunner.retrySingleProject(projectName)
+		if result.success {
+			fmt.Printf("✅ Successfully started project: %s\n", projectName)
+			retryRunner.successCount++
+		} else {
+			fmt.Printf("❌ Failed to start project %s: %v\n", projectName, result.err)
+			retryRunner.failedProjects = append(retryRunner.failedProjects, projectName)
 
-		projectDir, err := utils.ResolveHomeDir(projectPath)
-		if err != nil {
-			fmt.Printf("❌ Failed to resolve home directory for %s: %v\n", projectName, err)
-			stillFailed = append(stillFailed, projectName)
-			continue
-		}
-
-		cm, err := docker.NewComposeManager()
-		if err != nil {
-			fmt.Printf("❌ Failed to create compose manager for %s: %v\n", projectName, err)
-			stillFailed = append(stillFailed, projectName)
-			continue
-		}
-
-		fmt.Printf("🔄 Retrying project: %s\n", projectName)
-		err = cm.StartProject(projectDir, true, true)
-		err = cm.Close()
-		if err != nil {
-			fmt.Printf("❌ Failed to start project %s: %v\n", projectName, err)
-			stillFailed = append(stillFailed, projectName)
-
-			// If Docker daemon becomes unavailable during operation, stop trying
-			if isDaemonError(err) {
+			// Stop if Docker daemon becomes unavailable
+			if isDaemonError(result.err) {
 				fmt.Println("\n🛑 Docker daemon issue detected. Stopping further operations.")
 				break
 			}
-			continue
 		}
-
-		fmt.Printf("✅ Successfully started project: %s\n", projectName)
-		successCount++
 	}
 
-	fmt.Printf("\n🎯 Retry Results: %d/%d projects started successfully\n", successCount, len(failedProjects))
+	printRetryResults(retryRunner.successCount, len(failedProjects), retryRunner.failedProjects)
+}
+
+// retrySingleProject retries starting a single project
+func (r *projectRunner) retrySingleProject(projectName string) result {
+	fmt.Printf("🔄 Retrying project: %s\n", projectName)
+	return r.startSingleProject(projectName)
+}
+
+// printRetryResults displays the results of the retry operation
+func printRetryResults(successCount, totalRetried int, stillFailed []string) {
+	fmt.Printf("\n🎯 Retry Results: %d/%d projects started successfully\n", successCount, totalRetried)
 	if len(stillFailed) > 0 {
 		fmt.Printf("❌ Still failing: %v\n", stillFailed)
 		fmt.Println("💡 Tip: Use 'dockyard auth' to set up authentication if needed")
 	}
 }
 
+// Execute adds all child commands to the root command and sets flags appropriately.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
