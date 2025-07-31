@@ -71,7 +71,7 @@ var config PlatformsConfig
 
 func init() {
 	if err := yaml.Unmarshal(platformsYAML, &config); err != nil {
-		panic(fmt.Sprintf("failed to load platforms config: %v", err))
+		panic(fmt.Sprintf("Failed to load platforms config from platforms.yaml: %v\nPlease check that platforms.yaml exists, is accessible, and is valid YAML format.", err))
 	}
 }
 
