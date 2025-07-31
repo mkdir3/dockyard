@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"dockyard/pkg/ui"
 	_ "embed"
 	"fmt"
 	"gopkg.in/yaml.v3"
@@ -76,13 +77,8 @@ func init() {
 }
 
 func printLines(lines []string) {
-	for _, line := range lines {
-		if line == "" {
-			fmt.Println()
-		} else {
-			fmt.Println(line)
-		}
-	}
+	styled := ui.RenderList(lines)
+	fmt.Print(styled)
 }
 
 func getPlatformConfiguration(platform string) PlatformConfiguration {

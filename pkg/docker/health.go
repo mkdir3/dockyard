@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/pkg/ui"
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/docker/docker/client"
 )
@@ -21,39 +22,12 @@ const (
 
 type ContainerRuntime string
 
-const (
-	RuntimeOrbStack      ContainerRuntime = "orbstack"
-	RuntimeColima        ContainerRuntime = "colima"
-	RuntimeDockerDesktop ContainerRuntime = "docker-desktop"
-	RuntimePodman        ContainerRuntime = "podman"
-	RuntimeDockerEngine  ContainerRuntime = "docker-engine"
-)
-
 type Platform string
 
 const (
 	PlatformDarwin  Platform = "darwin"
 	PlatformWindows Platform = "windows"
 	PlatformLinux   Platform = "linux"
-)
-
-type UIAction string
-
-const (
-	ActionStartAutomatically UIAction = "start_automatically"
-	ActionWaitAndRetry       UIAction = "wait_and_retry"
-	ActionShowManual         UIAction = "show_manual"
-	ActionShowAutoStart      UIAction = "show_auto_start"
-	ActionExit               UIAction = "exit"
-)
-
-const (
-	OptionStartAutomatically = "Try to start container runtime automatically"
-	OptionWaitAndRetry       = "Wait and retry (container runtime might be starting)"
-	OptionShowManual         = "Show manual startup commands"
-	OptionShowAutoStart      = "Show auto-start setup (start with computer)"
-	OptionGetInstructions    = "Get manual startup instructions"
-	OptionExit               = "Exit and fix manually"
 )
 
 const (
@@ -84,13 +58,11 @@ func (e *RuntimeNotFoundError) Error() string {
 	return fmt.Sprintf("no container runtime found for platform %s", e.Platform)
 }
 
-// HealthChecker handles Docker daemon connectivity and health checks
 type HealthChecker struct {
 	client client.APIClient
 	ctx    context.Context
 }
 
-// NewDockerHealthChecker creates a new Docker health checker
 func NewDockerHealthChecker() (*HealthChecker, error) {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -104,7 +76,6 @@ func NewDockerHealthChecker() (*HealthChecker, error) {
 	}, nil
 }
 
-// Close closes the Docker client connection
 func (dhc *HealthChecker) Close() error {
 	if dhc.client != nil {
 		return dhc.client.Close()
@@ -136,7 +107,7 @@ func StartDockerDesktop() error {
 }
 
 func CheckDockerStatus() error {
-	fmt.Println(config.Common.DockerStatusCheck)
+	fmt.Println(ui.RenderInfo(config.Common.DockerStatusCheck))
 
 	if !IsDockerAvailable() {
 		return handleDockerNotInstalled()
@@ -158,12 +129,12 @@ func CheckDockerStatus() error {
 		return handleDockerDaemonError(err)
 	}
 
-	fmt.Println(config.Common.DockerRunning)
+	fmt.Println(ui.RenderSuccess(config.Common.DockerRunning))
 	return nil
 }
 
 func handleDockerNotInstalled() error {
-	fmt.Println(config.Common.DockerNotFound)
+	fmt.Println(ui.RenderError(config.Common.DockerNotFound))
 
 	platformConfig := getPlatformConfiguration(runtime.GOOS)
 	printLines(platformConfig.InstallOptions)
@@ -234,8 +205,8 @@ func attemptOrbStackStart() error {
 		return showOrbStackInstructions()
 	}
 
-	fmt.Println(config.Common.OrbStackStartSent)
-	fmt.Println(config.Common.OrbStackNote)
+	fmt.Println(ui.RenderSuccess(config.Common.OrbStackStartSent))
+	fmt.Println(ui.RenderInfo(config.Common.OrbStackNote))
 	return waitAndRetryDocker()
 }
 
@@ -257,8 +228,8 @@ func attemptColimaStart() error {
 		return showColimaInstructions()
 	}
 
-	fmt.Println(config.Common.ColimaStartSent)
-	fmt.Println(config.Common.ColimaNote)
+	fmt.Println(ui.RenderSuccess(config.Common.ColimaStartSent))
+	fmt.Println(ui.RenderInfo(config.Common.ColimaNote))
 	return waitAndRetryDocker()
 }
 
@@ -276,16 +247,16 @@ func showColimaInstructions() error {
 }
 
 func attemptContainerRuntimeStart() error {
-	fmt.Println(config.Common.RuntimeStartAttempt)
+	fmt.Println(ui.RenderInfo(config.Common.RuntimeStartAttempt))
 
 	if runtime.GOOS == string(PlatformDarwin) {
 		if _, err := exec.LookPath(CommandOrbctl); err == nil {
-			fmt.Println("   Found OrbStack, attempting to start...")
+			fmt.Println(ui.RenderInfo("   Found " + ui.RenderRuntimeIcon("orbstack") + " OrbStack, attempting to start..."))
 			return attemptOrbStackStart()
 		}
 
 		if _, err := exec.LookPath(CommandColima); err == nil {
-			fmt.Println("   Found Colima, attempting to start...")
+			fmt.Println(ui.RenderInfo("   Found " + ui.RenderRuntimeIcon("colima") + " Colima, attempting to start..."))
 			return attemptColimaStart()
 		}
 
@@ -295,7 +266,7 @@ func attemptContainerRuntimeStart() error {
 			return showStartupOptions()
 		}
 
-		fmt.Println(config.Common.DockerDesktopSent)
+		fmt.Println(ui.RenderSuccess(config.Common.DockerDesktopSent))
 		return waitAndRetryDocker()
 	}
 
@@ -305,12 +276,12 @@ func attemptContainerRuntimeStart() error {
 		return showStartupOptions()
 	}
 
-	fmt.Println(config.Common.ContainerRuntimeSent)
+	fmt.Println(ui.RenderSuccess(config.Common.ContainerRuntimeSent))
 	return waitAndRetryDocker()
 }
 
 func waitAndRetryDocker() error {
-	fmt.Println(config.Common.RuntimeWaiting)
+	fmt.Println(ui.RenderInfo(config.Common.RuntimeWaiting))
 
 	for i := 0; i < MaxRetries; i++ {
 		time.Sleep(RetryInterval)
@@ -324,7 +295,7 @@ func waitAndRetryDocker() error {
 		dhc.Close()
 
 		if err == nil {
-			fmt.Println("✅ Container runtime is now running!")
+			fmt.Println(ui.RenderSuccess("Container runtime is now running!"))
 			return nil
 		}
 
@@ -333,7 +304,7 @@ func waitAndRetryDocker() error {
 	}
 
 	fmt.Println()
-	fmt.Printf(config.Common.RuntimeStartFailed, int(RuntimeStartTimeout.Seconds()))
+	fmt.Printf(ui.RenderError(fmt.Sprintf(config.Common.RuntimeStartFailed, int(RuntimeStartTimeout.Seconds()))))
 	return showStartupOptions()
 }
 

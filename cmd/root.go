@@ -21,6 +21,10 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 	},
+	PreRun: func(cmd *cobra.Command, args []string) {
+		// Show welcome message only when running root command
+		utils.ProjectInfo()
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Docker status before proceeding
 		if err := docker.CheckDockerStatus(); err != nil {
