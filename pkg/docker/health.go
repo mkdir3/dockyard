@@ -333,7 +333,7 @@ func waitAndRetryDocker() error {
 	}
 
 	fmt.Println()
-	fmt.Printf(config.Common.RuntimeStartFailed, RuntimeStartTimeout)
+	fmt.Printf(config.Common.RuntimeStartFailed, int(RuntimeStartTimeout.Seconds()))
 	return showStartupOptions()
 }
 
