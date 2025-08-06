@@ -79,7 +79,8 @@ func displayWelcome(config *WelcomeConfig) {
 func displaySmartTip() {
 	tips := getContextualTips()
 
-	seed := time.Now().Hour()*60 + time.Now().Minute()/10
+	now := time.Now()
+	seed := now.Hour()*60 + now.Minute()/10
 	tipIndex := seed % len(tips)
 
 	fmt.Printf("\n%s %s\n",
